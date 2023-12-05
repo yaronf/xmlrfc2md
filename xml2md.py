@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-# import yaml  # pyyaml package
+import yaml  # pyyaml package
 import sys
 
 
@@ -27,7 +27,7 @@ def section_title(elem: ET, level):
     if name is None:
         print("Section with no name")
         return ""
-    return "#" * level + " " + name.text + " " + anchor + "\n"
+    return "\n" + "#" * level + " " + name.text + " " + anchor + "\n"
 
 
 def extract_xref(elem):
@@ -86,12 +86,35 @@ def extract_sections(root, level, bulleted):
     return output
 
 
+def extract_preamble(root):
+    output = ""
+    front = root.find("front")
+    if front == "":
+        sys.exit("No abstract found")
+
+    title_el = front.find("title")
+    title = title_el.text
+    abbrev = title_el.get("abbrev")
+    rfc = root
+    docname = rfc.get("docName")
+    category = rfc.get("category")
+
+    preamble = {"title": title, "abbrev": abbrev, "docname": docname, "category": category, }
+    output += yaml.dump(preamble)
+    return output
+
+
 def parse_rfc(infile):
     output = ""
     tree = ET.parse(infile)
     root = tree.getroot()
     if root.tag != "rfc":
         sys.exit("Tag not found:\"rfc\"")
+
+    t = extract_preamble(root)
+    output += "---\n"
+    output += t
+    output += "\n"
 
     abstract = root.find("front/abstract")
     if abstract == "":
