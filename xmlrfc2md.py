@@ -152,7 +152,7 @@ def extract_preamble(rfc: ET) -> str:
     return output
 
 
-def convert_authors(front: ET) -> dict:
+def convert_authors(front: ET) -> list[dict]:
     authors = []
     for a in front.findall("author"):
         ins = a.get("initials") + " " + a.get("surname")
