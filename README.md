@@ -1,4 +1,4 @@
-# xml2md
+# xmlrfc2md
 
 Convert the XML version of a published IETF RFC into Markdown that can be used in a "bis" document.
 
