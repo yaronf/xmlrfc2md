@@ -4,4 +4,4 @@ Convert the XML version of a published IETF RFC into Markdown that can be used i
 
 This is very early code but already useful for the initial text extraction.
 
-Usage: xml2md *infile* *outfile*
+Usage: xmlrfc2md *infile* *outfile*
