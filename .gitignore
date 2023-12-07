@@ -1,0 +1,6 @@
+.refcache/
+.DS_Store
+*.xml
+*.html
+*.txt
+*.iml
