@@ -148,7 +148,23 @@ def extract_preamble(rfc: ET) -> str:
 
     authors = convert_authors(front)
     preamble["author"] = authors
-    output += yaml.dump(preamble)
+
+    normative = convert_references(rfc, "normative")
+    informative = convert_references(rfc, "informative")
+
+    # https://stackoverflow.com/questions/30134110/how-can-i-output-blank-value-in-python-yaml-file
+    yaml.SafeDumper.add_representer(
+        type(None),
+        lambda dumper, value: dumper.represent_scalar(u'tag:yaml.org,2002:null', '')
+    )
+
+    output += yaml.safe_dump(preamble, default_flow_style=False)
+    output += "\n\n"
+    if normative is not None:
+        output += yaml.safe_dump({"normative": normative}, default_flow_style=False)
+    if informative is not None:
+        output += yaml.safe_dump({"informative": informative}, default_flow_style=False)
+
     return output
 
 
@@ -176,6 +192,43 @@ def convert_authors(front: ET) -> list[dict]:
 
         authors.append(author)
     return authors
+
+
+def find_references(rfc: ET, ref_type: str) -> ET:
+    for block in rfc.findall("./back/references/references"):
+        name_el = block.find("./name")
+        if name_el is None:
+            print("No name for reference block")
+            continue
+        name = name_el.get("slugifiedName")
+        if name == "name-" + ref_type + "-references":
+            return block
+    return None
+
+
+def convert_references(rfc: ET, ref_type: str) -> dict | None:
+    ref_block = find_references(rfc, ref_type)
+    if ref_block is None:
+        print("No " + ref_type + " references?")
+        return None
+    ref_list = ref_block.findall("./reference")
+    if len(ref_list) == 0:
+        print("No " + ref_type + " references?")
+        return None
+    refs = {}
+    for ref in ref_list:
+        anchor = ref.get("anchor")
+        if anchor is None:
+            print("Reference missing an anchor")
+            continue
+        if anchor.startswith("RFC"):
+            refs[anchor] = None
+            continue
+        target = ref.get("target")
+        if target is not None and target.startswith("https://doi.org/"):
+            doi = target.removeprefix("https://doi.org/")
+            refs[anchor] = "DOI." + doi
+    return refs
 
 
 def parse_rfc(infile: str):
