@@ -3,10 +3,6 @@ import yaml  # pyyaml package
 import sys
 import textwrap
 
-# TODO No sec number ("appendix") for acknowledgements
-# TODO Dates in references
-# TODO Author addresses
-
 wrapper = textwrap.TextWrapper(width=120, replace_whitespace=False, break_on_hyphens=False)
 
 internal_refs = []
@@ -95,9 +91,11 @@ def extract_sections(root: ET, level: int, list_type=Lists.NoType) -> str:
                 output += pre + extract_sections(elem, level, )
                 output += "\n"
             case "section":
-                output += section_title(elem, level + 1)
-                output += extract_sections(elem, level + 1, )
-                output += "\n"
+                if elem.get("anchor") != "authors-addresses":
+                    # Hack: kdrfc only adds this section if the title is missing
+                    output += section_title(elem, level + 1)
+                    output += extract_sections(elem, level + 1, )
+                    output += "\n"
             case "ul":
                 output += extract_sections(elem, level, Lists.Unordered)
             case "ol":
@@ -259,6 +257,15 @@ def full_ref(ref: ET) -> dict | None:
         print("Reference with no title")
         return None
     out["title"] = title_el.text
+    date_el = front.find("date")
+    if date_el is not None:
+        month = date_el.get("month")
+        year = date_el.get("year")
+        if month:
+            date = month + " " + year
+        else:
+            date = year
+        out["date"] = date
     authors = convert_authors(front)
     out["author"] = authors
     return out
