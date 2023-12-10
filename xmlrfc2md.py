@@ -1,6 +1,15 @@
 import xml.etree.ElementTree as ET
 import yaml  # pyyaml package
 import sys
+import textwrap
+
+# TODO No sec number ("appendix") for acknowledgements
+# TODO Dates in references
+# TODO Author addresses
+
+wrapper = textwrap.TextWrapper(width=120, replace_whitespace=False, break_on_hyphens=False)
+
+internal_refs = []
 
 
 def collapse_spaces(t: str):
@@ -22,12 +31,16 @@ def extract_text(root: ET):
 
 
 def section_title(elem: ET, level: int):
-    anchor = "{#" + elem.get("anchor") + "}"
+    anchor_name = elem.get("anchor")
+    anchor = ""
+    if anchor_name is not None:
+        internal_refs.append(anchor_name)
+        anchor = "{#" + elem.get("anchor") + "}"
     name = elem.find("name")
     if name is None:
         print("Section with no name")
         return ""
-    return "\n" + "#" * level + " " + name.text + " " + anchor + "\n"
+    return "\n" + "#" * level + " " + name.text.strip() + " " + anchor + "\n"
 
 
 def extract_xref(elem: ET):
@@ -52,7 +65,13 @@ def extract_xref(elem: ET):
     return "{{" + target + "}}"
 
 
-def extract_sections(root: ET, level: int, bulleted=False) -> str:
+class Lists:
+    NoType = 0
+    Unordered = 1
+    Ordered = 2
+
+
+def extract_sections(root: ET, level: int, list_type=Lists.NoType) -> str:
     """Extract text from a sequence of <t> elements, possibly nested
 """
     output = ""
@@ -63,8 +82,16 @@ def extract_sections(root: ET, level: int, bulleted=False) -> str:
             case "t":
                 output += extract_sections(elem, level, )
                 output += "\n"
+            case "blockquote":
+                output += "> " + extract_sections(elem, level)
+                output += "\n"
             case "li":
-                pre = "* " if bulleted else ""
+                if list_type == Lists.NoType:
+                    pre = ""
+                elif list_type == Lists.Unordered:
+                    pre = "* "
+                else:
+                    pre = "1. "
                 output += pre + extract_sections(elem, level, )
                 output += "\n"
             case "section":
@@ -72,11 +99,17 @@ def extract_sections(root: ET, level: int, bulleted=False) -> str:
                 output += extract_sections(elem, level + 1, )
                 output += "\n"
             case "ul":
-                output += extract_sections(elem, level, True)
+                output += extract_sections(elem, level, Lists.Unordered)
+            case "ol":
+                output += extract_sections(elem, level, Lists.Ordered)
             case "xref":
                 output += extract_xref(elem)
             case "bcp14":
                 output += elem.text
+            case "tt":
+                output += "`" + elem.text + "`"
+            case "sup":
+                output += "<sup>" + elem.text + "</sup>"
             case "contact":
                 output += " " + elem.get("fullname")
             case "name" | "references" | "author":
@@ -119,6 +152,8 @@ def extract_preamble(rfc: ET) -> str:
 
     keywords = [el.text for el in front.findall("keyword")]
     preamble["keyword"] = keywords
+
+    preamble["stand_alone"] = "yes"  # Magic required for some references to work
 
     # noinspection PyDictCreation
     pi = {}
@@ -171,24 +206,28 @@ def extract_preamble(rfc: ET) -> str:
 def convert_authors(front: ET) -> list[dict]:
     authors = []
     for a in front.findall("author"):
-        ins = a.get("initials") + " " + a.get("surname")
+        author = {}
+        initials = a.get("initials")
+        surname = a.get("surname")
+        if initials is not None and surname is not None:
+            ins = initials + " " + surname
+            author["ins"] = ins
         name = a.get("fullname")
+        if name is not None:
+            author["name"] = name
         org_el = a.find("organization")
-        if org_el is None:
-            org = None
-        else:
+        if org_el is not None:
             org = org_el.text
+            if org:
+                author["organization"] = org
         uri_el = a.find("uri")
-        if uri_el is None:
-            uri = None
-        else:
+        if uri_el is not None:
             uri = uri_el.text
-        email = a.find("address").find("email").text
-        author = {"ins": ins, "name": name, "email": email}
-        if org is not None:
-            author["organization"] = org
-        if uri is not None:
             author["uri"] = uri
+        email_el = a.find("address/email")
+        if email_el is not None:
+            email = email_el.text
+            author["email"] = email
 
         authors.append(author)
     return authors
@@ -206,6 +245,25 @@ def find_references(rfc: ET, ref_type: str) -> ET:
     return None
 
 
+def full_ref(ref: ET) -> dict | None:
+    out = {}
+    target = ref.get("target")
+    if target is not None:
+        out["target"] = target
+    front = ref.find("front")
+    if front is None:
+        print("Reference with no front")
+        return None
+    title_el = front.find("title")
+    if title_el is None:
+        print("Reference with no title")
+        return None
+    out["title"] = title_el.text
+    authors = convert_authors(front)
+    out["author"] = authors
+    return out
+
+
 def convert_references(rfc: ET, ref_type: str) -> dict | None:
     ref_block = find_references(rfc, ref_type)
     if ref_block is None:
@@ -221,14 +279,28 @@ def convert_references(rfc: ET, ref_type: str) -> dict | None:
         if anchor is None:
             print("Reference missing an anchor")
             continue
-        if anchor.startswith("RFC"):
+        if (anchor.startswith("RFC") or anchor.startswith("I-D.") or anchor.startswith("BCP") or
+                anchor.startswith("STD")):
             refs[anchor] = None
             continue
         target = ref.get("target")
         if target is not None and target.startswith("https://doi.org/"):
             doi = target.removeprefix("https://doi.org/")
             refs[anchor] = "DOI." + doi
+            continue
+        converted = full_ref(ref)
+        if converted is not None:
+            refs[anchor] = converted
     return refs
+
+
+def fill_text(text: str) -> str:
+    """https://stackoverflow.com/questions/57081970/python-textwrap-with-n-is-placing-newline-mid-paragraph"""
+    paragraphs = text.splitlines()
+    text_out = "\n".join([
+        wrapper.fill(p) for p in paragraphs
+    ])
+    return text_out
 
 
 def parse_rfc(infile: str):
@@ -254,13 +326,13 @@ def parse_rfc(infile: str):
     middle = root.find("middle")
     if middle == "":
         sys.exit("Cannot find middle part of document")
-    t = extract_sections(middle, 0, False)
+    t = fill_text(extract_sections(middle, 0, False))
     output += "--- middle\n\n"
     output += t
 
     back = root.find("back")
     if back != "":
-        t = extract_sections(back, 0, False)
+        t = fill_text(extract_sections(back, 0, False))
         output += "--- back\n\n"
         output += t
 
