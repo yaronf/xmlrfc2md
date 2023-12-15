@@ -47,24 +47,27 @@ def extract_xref(elem: ET):
     if target is None:
         print("Missing target in xref")
         return "badxref"
-    if target.startswith("RFC"):
-        if section_format != "of" and section_format != "comma":
+    if section is None:
+        return "{{" + target + "}}"
+    match section_format:
+        case "of":
+            return "Section " + section + " of {{" + target + "}}"
+        case "comma":
+            return "{{" + target + "}}, Section " + section
+        case "parens":
+            return "{{" + target + "}} (" + section + ")"
+        case "bare":
+            return section
+        case _:
             print("Unsupported xref section format: " + section_format)
             return "badxref"
-        if section is None:
-            return "{{" + target + "}}"
-        else:
-            if section_format == "of":
-                return "Section " + section + " of {{" + target + "}}"
-            else:  # comma
-                return "{{" + target + "}}, Section " + section
-    return "{{" + target + "}}"
 
 
 class Lists:
     NoType = 0
     Unordered = 1
     Ordered = 2
+    Definition = 3
 
 
 def extract_sections(root: ET, level: int, list_type=Lists.NoType) -> str:
@@ -100,8 +103,16 @@ def extract_sections(root: ET, level: int, list_type=Lists.NoType) -> str:
                 output += extract_sections(elem, level, Lists.Unordered)
             case "ol":
                 output += extract_sections(elem, level, Lists.Ordered)
+            case "dl":
+                output += extract_sections(elem, level, Lists.Definition)
+            case "dt":
+                output += elem.text
+            case "dd":
+                output += ": " + extract_sections(elem, level)
             case "xref":
                 output += extract_xref(elem)
+            case "displayreference":
+                pass
             case "bcp14":
                 output += elem.text
             case "tt":
@@ -298,6 +309,20 @@ def convert_references(rfc: ET, ref_type: str) -> dict | None:
         converted = full_ref(ref)
         if converted is not None:
             refs[anchor] = converted
+
+    ref_groups = ref_block.findall("./referencegroup")
+    for group in ref_groups:
+        anchor = group.get("anchor")
+        if anchor is None:
+            print("Reference missing an anchor")
+            continue
+        if anchor.startswith("BCP") or anchor.startswith("STD"):
+            refs[anchor] = None
+            continue
+        else:
+            print("Unexpected reference group")
+            continue
+
     return refs
 
 
