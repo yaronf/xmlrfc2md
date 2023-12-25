@@ -70,45 +70,41 @@ class Lists:
     Definition = 3
 
 
-def extract_sections(root: ET, level: int, list_type=Lists.NoType) -> str:
+def extract_sections(root: ET, section_level: int, list_level: int, list_type=Lists.NoType) -> str:
     """Extract text from a sequence of <t> elements, possibly nested
 """
     output = ""
     if root.text is not None:
         output += collapse_spaces(root.text)
+# TODO <li> requires special treatment, where the contents is either text or a series of <t>, with the first one getting
+# the prefix and the next being indented
     for elem in root:
         match elem.tag:
             case "t":
-                output += extract_sections(elem, level, )
+                output += extract_sections(elem, section_level, list_level)
                 output += "\n"
             case "blockquote":
-                output += "> " + extract_sections(elem, level)
+                output += "> " + extract_sections(elem, section_level, list_level)
                 output += "\n"
             case "li":
-                if list_type == Lists.NoType:
-                    pre = ""
-                elif list_type == Lists.Unordered:
-                    pre = "* "
-                else:
-                    pre = "1. "
-                output += pre + extract_sections(elem, level, )
+                output += extract_li(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
                 if elem.get("anchor") != "authors-addresses":
                     # Hack: kdrfc only adds this section if the title is missing
-                    output += section_title(elem, level + 1)
-                    output += extract_sections(elem, level + 1, )
+                    output += section_title(elem, section_level + 1)
+                    output += extract_sections(elem, section_level + 1, 0)
                     output += "\n"
             case "ul":
-                output += extract_sections(elem, level, Lists.Unordered)
+                output += extract_sections(elem, section_level, list_level, Lists.Unordered)
             case "ol":
-                output += extract_sections(elem, level, Lists.Ordered)
+                output += extract_sections(elem, section_level, list_level, Lists.Ordered)
             case "dl":
-                output += extract_sections(elem, level, Lists.Definition)
+                output += extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dt":
-                output += elem.text
+                output += "\n" + elem.text
             case "dd":
-                output += ": " + extract_sections(elem, level)
+                output += ": " + extract_sections(elem, section_level, list_level)
             case "xref":
                 output += extract_xref(elem)
             case "displayreference":
@@ -131,7 +127,34 @@ def extract_sections(root: ET, level: int, list_type=Lists.NoType) -> str:
     return output
 
 
-def conditional_add(m: dict, key: str, value):
+def extract_li(root: ET, section_level: int, list_level: int, list_type: int) -> str:
+    if list_type == Lists.NoType:
+        pre = ""
+    elif list_type == Lists.Unordered:
+        pre = "* "
+    else:
+        pre = "1. "
+    output = ""
+    ts = root.find("t")
+    if ts is None or len(ts) == 0:
+        output += pre + extract_sections(root, section_level, list_level)
+    else:
+        output = ""
+        is_first = True
+        for elem in root:
+            if elem.tag == "t":
+                if is_first:
+                    output += pre + extract_sections(elem, section_level, list_level)
+                    is_first = False
+                else:
+                    output += "    " * list_level + extract_sections(elem, section_level, list_level)
+            else:
+                output += extract_sections(elem, section_level, list_level)
+            output += "\n"
+    return output
+
+
+def conditional_add(m: dict, key: str, value) -> None:
     if value is not None:
         m[key] = value
 
