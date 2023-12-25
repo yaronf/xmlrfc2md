@@ -59,7 +59,8 @@ def extract_xref(elem: ET):
         return "badxref"
     if section is None:
         return "{{" + target + "}}"
-    match section_format:
+    match section_format:  # This is rudimentary. Need a lot of context to reverse engineer the XML into
+        # the Kramdown format, https://github.com/cabo/kramdown-rfc/wiki/Syntax2#section-references
         case "of":
             return "Section " + section + " of {{" + target + "}}"
         case "comma":
@@ -78,6 +79,14 @@ class Lists:
     Unordered = 1
     Ordered = 2
     Definition = 3
+
+
+def extract_sourcecode(e: ET) -> str:
+    lang = e.get("type")
+    if lang is None:
+        return "\n~~~\n" + e.text + "\n~~~"
+    else:
+        return "\n~~~ " + lang + "\n" + e.text + "\n~~~"
 
 
 def extract_sections(root: ET, section_level: int, list_level: int, list_type=Lists.NoType) -> str:
@@ -114,7 +123,7 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
             case "dt":
                 output += "\n" + elem.text
             case "dd":
-                output += ": " + extract_sections(elem, section_level, list_level)
+                output += ": " + extract_sections(elem, section_level, list_level).lstrip()
             case "xref":
                 output = concat_with_space(output, extract_xref(elem))
             case "displayreference":
@@ -130,6 +139,8 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
             case "name" | "references" | "author":
                 pass  # section name is processed by section_title(), references processed in extract_preamble(),
                 # authors defined twice (?)
+            case "sourcecode" | "artwork":
+                output += extract_sourcecode(elem)
             case _:
                 print("Skipping unknown element: ", elem.tag)
         if elem.tail is not None:
@@ -147,14 +158,14 @@ def extract_li(root: ET, section_level: int, list_level: int, list_type: int) ->
     output = ""
     ts = root.find("t")
     if ts is None or len(ts) == 0:
-        output += pre + extract_sections(root, section_level, list_level)
+        output += pre + extract_sections(root, section_level, list_level).lstrip()
     else:
         output = ""
         is_first = True
         for elem in root:
             if elem.tag == "t":
                 if is_first:
-                    output += pre + extract_sections(elem, section_level, list_level)
+                    output += pre + extract_sections(elem, section_level, list_level).lstrip()
                     is_first = False
                 else:
                     output += "    " * list_level + extract_sections(elem, section_level, list_level)
@@ -189,8 +200,9 @@ def extract_preamble(rfc: ET) -> str:
     conditional_add(preamble, "ipr", ipr)
     area = front.find("area").text
     conditional_add(preamble, "area", area)
-    workgroup = front.find("workgroup").text
-    conditional_add(preamble, "workgroup", workgroup)
+    workgroup_el = front.find("workgroup")
+    if workgroup_el is not None:
+        conditional_add(preamble, "workgroup", workgroup_el.text)
 
     keywords = [el.text for el in front.findall("keyword")]
     preamble["keyword"] = keywords
