@@ -1,4 +1,7 @@
 import xml.etree.ElementTree as ET
+import logging
+from typing import Dict, Any
+
 import yaml  # pyyaml package
 import sys
 import textwrap
@@ -6,6 +9,17 @@ import textwrap
 wrapper = textwrap.TextWrapper(width=120, replace_whitespace=False, break_on_hyphens=False)
 
 internal_refs = []
+
+messages: dict[Any, int] = {}
+
+
+def throttle(msg_type, msg: str) -> None:
+    global messages
+    if msg_type not in messages:
+        messages[msg_type] = 0
+    if messages[msg_type] == 0:
+        logging.warning(msg)
+    messages[msg_type] += 1
 
 
 def collapse_spaces(t: str):
@@ -44,7 +58,7 @@ def section_title(elem: ET, level: int):
         anchor = "{#" + elem.get("anchor") + "}"
     name = elem.find("name")
     if name is None:
-        print("Section with no name")
+        logging.error("section with no name")
         return ""
     return "\n" + "#" * level + " " + name.text.strip() + " " + anchor + "\n"
 
@@ -53,14 +67,17 @@ def extract_xref(elem: ET):
     target = elem.get("target")
     section = elem.get("section")
     section_format = elem.get("sectionFormat")
+    format = elem.get("format")
 
     if target is None:
-        print("Missing target in xref")
+        logging.error("missing target in xref")
         return "badxref"
     if section is None:
-        return "{{" + target + "}}"
-    match section_format:  # This is rudimentary. Need a lot of context to reverse engineer the XML into
-        # the Kramdown format, https://github.com/cabo/kramdown-rfc/wiki/Syntax2#section-references
+        if format == "counter":
+            return "{{<" + target + "}}"
+        else:
+            return "{{" + target + "}}"
+    match section_format:
         case "of":
             return "Section " + section + " of {{" + target + "}}"
         case "comma":
@@ -70,7 +87,7 @@ def extract_xref(elem: ET):
         case "bare":
             return section
         case _:
-            print("Unsupported xref section format: " + section_format)
+            logging.error("unsupported xref section format: " + section_format)
             return "badxref"
 
 
@@ -86,7 +103,36 @@ def extract_sourcecode(e: ET) -> str:
     if lang is None:
         return "\n~~~\n" + e.text + "\n~~~"
     else:
+        throttle("warn-lang", "language tag for source code may be incorrect")
         return "\n~~~ " + lang + "\n" + e.text + "\n~~~"
+
+
+def extract_figure(e: ET) -> str:
+    anchor = e.get("anchor")
+    if anchor is None:
+        logging.error("missing anchor for figure")
+        return ""
+    artset = e.find("./artset")
+    if artset is not None:
+        logging.warning(f"artset found for figure {anchor},"
+                        f" Kramdown does not support raw SVG yet, extracting ASCII art")
+        content = e.find("./artset/artwork[@type='ascii-art']")
+        if content is None:
+            logging.error(f"no ASCII art for {anchor}")
+            return ""
+    else:
+        content = e.find("./artwork")
+        if content is None:
+            content = e.find("./sourcecode")
+        if content is None:
+            logging.warning(f"figure {anchor} has no content?")
+            return ""
+    name_el = e.find("./name")
+    if name_el is not None:
+        name = name_el.text
+        return extract_sourcecode(content) + "\n{: #" + anchor + " title=\"" + name + "\"}\n"
+    else:
+        return extract_sourcecode(content)
 
 
 def extract_sections(root: ET, section_level: int, list_level: int, list_type=Lists.NoType) -> str:
@@ -100,6 +146,9 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
     for elem in root:
         match elem.tag:
             case "t":
+                anchor = elem.get("anchor")
+                if anchor is not None and not anchor.startswith("section-"):
+                    output += "{: #" + anchor + "}\n"
                 output += extract_sections(elem, section_level, list_level)
                 output += "\n"
             case "blockquote":
@@ -121,7 +170,7 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
             case "dl":
                 output += extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dt":
-                output += "\n" + elem.text
+                output += "\n" + extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dd":
                 output += ": " + extract_sections(elem, section_level, list_level).lstrip()
             case "xref":
@@ -141,8 +190,10 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
                 # authors defined twice (?)
             case "sourcecode" | "artwork":
                 output += extract_sourcecode(elem)
+            case "figure":
+                output += extract_figure(elem)
             case _:
-                print("Skipping unknown element: ", elem.tag)
+                logging.error("skipping unknown element: %s", elem.tag)
         if elem.tail is not None:
             output += collapse_spaces(elem.tail)
     return output
@@ -291,7 +342,7 @@ def find_references(rfc: ET, ref_type: str) -> ET:
     for block in rfc.findall("./back/references/references"):
         name_el = block.find("./name")
         if name_el is None:
-            print("No name for reference block")
+            logging.error("no name for reference block")
             continue
         name = name_el.get("slugifiedName")
         if name == "name-" + ref_type + "-references":
@@ -306,11 +357,11 @@ def full_ref(ref: ET) -> dict | None:
         out["target"] = target
     front = ref.find("front")
     if front is None:
-        print("Reference with no front")
+        logging.error("reference with no front")
         return None
     title_el = front.find("title")
     if title_el is None:
-        print("Reference with no title")
+        logging.error("reference with no title")
         return None
     out["title"] = title_el.text
     date_el = front.find("date")
@@ -330,17 +381,17 @@ def full_ref(ref: ET) -> dict | None:
 def convert_references(rfc: ET, ref_type: str) -> dict | None:
     ref_block = find_references(rfc, ref_type)
     if ref_block is None:
-        print("No " + ref_type + " references?")
+        logging.warning(f"no {ref_type} references?")
         return None
     ref_list = ref_block.findall("./reference")
     if len(ref_list) == 0:
-        print("No " + ref_type + " references?")
+        logging.warning(f"no {ref_type} references?")
         return None
     refs = {}
     for ref in ref_list:
         anchor = ref.get("anchor")
         if anchor is None:
-            print("Reference missing an anchor")
+            logging.warning("reference missing an anchor")
             continue
         if (anchor.startswith("RFC") or anchor.startswith("I-D.") or anchor.startswith("BCP") or
                 anchor.startswith("STD")):
@@ -359,13 +410,13 @@ def convert_references(rfc: ET, ref_type: str) -> dict | None:
     for group in ref_groups:
         anchor = group.get("anchor")
         if anchor is None:
-            print("Reference missing an anchor")
+            logging.warning("reference missing an anchor")
             continue
         if anchor.startswith("BCP") or anchor.startswith("STD"):
             refs[anchor] = None
             continue
         else:
-            print("Unexpected reference group")
+            logging.warning("unexpected reference group")
             continue
 
     return refs
@@ -421,6 +472,8 @@ def main():
         sys.exit("Usage: " + sys.argv[0] + " infile outfile")
     infile = sys.argv[1]
     outfile = sys.argv[2]
+
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 
     markdown = parse_rfc(infile)
     out = open(outfile, "w")
