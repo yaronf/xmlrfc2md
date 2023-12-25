@@ -19,6 +19,16 @@ def collapse_spaces(t: str):
     return "\n".join(out)
 
 
+def concat_with_space(s, t: str) -> str:
+    if s == "" or t == "":
+        return s + t
+    if (s.endswith("(") or s.endswith("[") or s.endswith(".") or s.endswith("\"") or
+            t.startswith(" ") or t.startswith("\n")):
+        return s + t
+    else:
+        return s + " " + t
+
+
 def extract_text(root: ET):
     output = ""
     for para in root.findall("t"):
@@ -106,13 +116,13 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
             case "dd":
                 output += ": " + extract_sections(elem, section_level, list_level)
             case "xref":
-                output += extract_xref(elem)
+                output = concat_with_space(output, extract_xref(elem))
             case "displayreference":
                 pass
             case "bcp14":
-                output += elem.text
+                output = concat_with_space(output, elem.text)
             case "tt":
-                output += "`" + elem.text + "`"
+                output = concat_with_space(output, "`" + elem.text + "`")
             case "sup":
                 output += "<sup>" + elem.text + "</sup>"
             case "contact":
