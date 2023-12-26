@@ -1,3 +1,4 @@
+import re
 import xml.etree.ElementTree as ElementTree
 import argparse
 import logging
@@ -52,6 +53,7 @@ def simple_escape(t: str) -> str:
     t = t.replace(">", "&gt;")
     t = t.replace("[", "\[")
     t = t.replace("]", "\]")
+    t = t.replace("\t", " ")
     return t
 
 
@@ -210,12 +212,11 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += "{:aside}\n> " + extract_sections(elem, section_level, list_level).lstrip()
                 output += "\n"
             case "eref":
-                brackets = elem.get("brackets")
-                if brackets is None or brackets == "none":
-                    output = concat_with_space(output, elem.get("target"))
-                else:
-                    output = concat_with_space(output, "<" + elem.get("target") + ">")  ## and this is not escaped!
+                output = extract_eref(output, elem)
             case "li":
+                anchor = elem.get("anchor")
+                if anchor is not None:
+                    output += "{: #" + anchor + "}\n"
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
@@ -231,7 +232,11 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "dl":
                 output += extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dt":
-                output += "\n" + extract_sections(elem, section_level, list_level, Lists.Definition)
+                anchor = elem.get("anchor")
+                if anchor is not None:
+                    output += "\n" + " {: #" + anchor + "}" + extract_sections(elem, section_level, list_level, Lists.Definition)
+                else:
+                    output += "\n" + extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dd":
                 output += ": " + extract_sections(elem, section_level, list_level).lstrip()
             case "xref":
@@ -268,6 +273,19 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
     return output
 
 
+def extract_eref(output: str, root: ElementTree) -> str:
+    brackets = root.get("brackets")
+    if brackets is None or brackets == "none":
+        output = concat_with_space(output, root.get("target"))
+    else:
+        target = root.get("target")
+        if target.startswith("http"):  # yes this is a hack
+            output = concat_with_space(output, "<" + root.get("target") + ">")  # and this is not escaped!
+        else:
+            output = concat_with_space(output, "&lt;" + root.get("target") + "&gt;")
+    return output
+
+
 def extract_list(root: ElementTree, section_level: int, list_level: int, list_type: int) -> str:
     if list_type == Lists.NoType:
         pre = ""
@@ -288,7 +306,7 @@ def extract_list(root: ElementTree, section_level: int, list_level: int, list_ty
                     output += pre + extract_sections(elem, section_level, list_level).lstrip()
                     is_first = False
                 else:
-                    output += "    " * list_level + extract_sections(elem, section_level, list_level)
+                    output += "    " + extract_sections(elem, section_level, list_level)
             else:
                 output += extract_sections(elem, section_level, list_level)
             output += "\n"
@@ -298,6 +316,11 @@ def extract_list(root: ElementTree, section_level: int, list_level: int, list_ty
 def conditional_add(m: dict, key: str, value) -> None:
     if value is not None:
         m[key] = value
+
+
+def matches_rfc(s: str) -> bool:
+    match = re.fullmatch("rfc[0-9]+", s, re.IGNORECASE)
+    return match is not None
 
 
 def extract_preamble(rfc: ElementTree) -> str:
@@ -318,6 +341,8 @@ def extract_preamble(rfc: ElementTree) -> str:
     conditional_add(preamble, "category", category)
     ipr = rfc.get("ipr")
     conditional_add(preamble, "ipr", ipr)
+    submission_type = rfc.get("submissionType")
+    conditional_add(preamble, "submissiontype", submission_type)
     area_el = front.find("area")
     if area_el is not None:
         conditional_add(preamble, "area", area_el.text)
@@ -356,11 +381,16 @@ def extract_preamble(rfc: ElementTree) -> str:
 
     preamble["pi"] = pi
 
+    kramdown_options = {"auto_id_prefix": "autogen-"}
+    preamble["kramdown_options"] = kramdown_options
+
     authors = convert_authors(front)
     preamble["author"] = authors
 
     normative = convert_references(rfc, "normative")
     informative = convert_references(rfc, "informative")
+    if informative is None:
+        informative = convert_references(rfc, "informational")  # weird, appears in old RFCs
 
     # https://stackoverflow.com/questions/30134110/how-can-i-output-blank-value-in-python-yaml-file
     yaml.SafeDumper.add_representer(
@@ -466,7 +496,7 @@ def convert_references(rfc: ElementTree, ref_type: str) -> dict | None:
         if anchor is None:
             logging.warning("reference missing an anchor")
             continue
-        if (anchor.startswith("RFC") or anchor.startswith("I-D.") or anchor.startswith("BCP") or
+        if (matches_rfc(anchor) or anchor.startswith("I-D.") or anchor.startswith("BCP") or
                 anchor.startswith("STD")):
             refs[anchor] = None
             continue
