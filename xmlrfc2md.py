@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
+import argparse
 import logging
-from typing import Dict, Any
+from typing import Any
 
 import yaml  # pyyaml package
 import sys
@@ -22,7 +23,7 @@ def throttle(msg_type, msg: str) -> None:
     messages[msg_type] += 1
 
 
-def collapse_spaces(t: str):
+def collapse_spaces(t: str, span=False):
     lines = t.splitlines()
     out = []
     for ln in lines:
@@ -30,7 +31,10 @@ def collapse_spaces(t: str):
         if lst != ln:
             lst = " " + lst
         out.append(lst)
-    return "\n".join(out)
+    if not span:
+        return "\n".join(out)
+    else:
+        return " ".join(out)
 
 
 def concat_with_space(s, t: str) -> str:
@@ -67,13 +71,13 @@ def extract_xref(elem: ET):
     target = elem.get("target")
     section = elem.get("section")
     section_format = elem.get("sectionFormat")
-    format = elem.get("format")
+    fmt = elem.get("format")
 
     if target is None:
         logging.error("missing target in xref")
         return "badxref"
     if section is None:
-        if format == "counter":
+        if fmt == "counter":
             return "{{<" + target + "}}"
         else:
             return "{{" + target + "}}"
@@ -135,14 +139,55 @@ def extract_figure(e: ET) -> str:
         return extract_sourcecode(content)
 
 
-def extract_sections(root: ET, section_level: int, list_level: int, list_type=Lists.NoType) -> str:
+def extract_table(root: ET) -> str:
+    output = ""
+    thead = root.find("./thead")
+    output += "\n"
+    if thead is not None:
+        tr = thead.find("./tr")
+        if tr is None:
+            logging.error("no tr in table head")
+            return ""
+        ths = tr.findall("./th")
+        for th in ths:
+            output += "|" + extract_sections(th, 0, 0, span=True)
+        output += "\n"
+        for th in ths:
+            output += "|"
+            align = th.get("align")
+            if align is None:
+                dash = "-"
+            elif align == "left":
+                dash = ":-"
+            elif align == "center":
+                dash = ":-:"
+            else:
+                dash = "-:"
+            output += dash + " "
+        output += "\n"
+    tbody = root.find("./tbody")
+    if tbody is None:
+        logging.error("no body for table")
+        return ""
+    trs = tbody.findall("./tr")
+    if len(trs) == 0:
+        logging.error("no rows in table body")
+        return ""
+    for tr in trs:
+        tds = tr.findall("./td")
+        for td in tds:
+            output += "|" + extract_sections(td, 0, 0, span=True)
+        output += "\n"
+    output += "\n"
+    return output
+
+
+def extract_sections(root: ET, section_level: int, list_level: int, list_type=Lists.NoType, span=False) -> str:
     """Extract text from a sequence of <t> elements, possibly nested
 """
     output = ""
     if root.text is not None:
-        output += collapse_spaces(root.text)
-# TODO <li> requires special treatment, where the contents is either text or a series of <t>, with the first one getting
-# the prefix and the next being indented
+        output += collapse_spaces(root.text, span)
     for elem in root:
         match elem.tag:
             case "t":
@@ -155,7 +200,7 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
                 output += "> " + extract_sections(elem, section_level, list_level)
                 output += "\n"
             case "li":
-                output += extract_li(elem, section_level, list_level + 1, list_type)
+                output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
                 if elem.get("anchor") != "authors-addresses":
@@ -192,14 +237,16 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
                 output += extract_sourcecode(elem)
             case "figure":
                 output += extract_figure(elem)
+            case "table":
+                output += extract_table(elem)
             case _:
                 logging.error("skipping unknown element: %s", elem.tag)
         if elem.tail is not None:
-            output += collapse_spaces(elem.tail)
+            output += collapse_spaces(elem.tail, span)
     return output
 
 
-def extract_li(root: ET, section_level: int, list_level: int, list_type: int) -> str:
+def extract_list(root: ET, section_level: int, list_level: int, list_type: int) -> str:
     if list_type == Lists.NoType:
         pre = ""
     elif list_type == Lists.Unordered:
@@ -431,7 +478,7 @@ def fill_text(text: str) -> str:
     return text_out
 
 
-def parse_rfc(infile: str):
+def parse_rfc(infile: str, fill: bool):
     output = ""
     tree = ET.parse(infile)
     root = tree.getroot()
@@ -454,13 +501,21 @@ def parse_rfc(infile: str):
     middle = root.find("middle")
     if middle == "":
         sys.exit("Cannot find middle part of document")
-    t = fill_text(extract_sections(middle, 0, False))
+    extracted = extract_sections(middle, 0, False)
+    if not fill:
+        t = extracted
+    else:
+        t = fill_text(extracted)
     output += "--- middle\n\n"
     output += t
 
     back = root.find("back")
     if back != "":
-        t = fill_text(extract_sections(back, 0, False))
+        extracted = extract_sections(back, 0, False)
+        if not fill:
+            t = extracted
+        else:
+            t = fill_text(extracted)
         output += "--- back\n\n"
         output += t
 
@@ -468,15 +523,17 @@ def parse_rfc(infile: str):
 
 
 def main():
-    if len(sys.argv) != 3:
-        sys.exit("Usage: " + sys.argv[0] + " infile outfile")
-    infile = sys.argv[1]
-    outfile = sys.argv[2]
+    parser = argparse.ArgumentParser(description='Convert a published RFC from XML to Markdown')
+    parser.add_argument('infile', help='input XML file')
+    parser.add_argument('outfile', help='output Markdown file')
+    parser.add_argument('--fill', '-f', action=argparse.BooleanOptionalAction,
+                        help='fill paragraphs (might break some markdown)')
+    args = parser.parse_args()
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 
-    markdown = parse_rfc(infile)
-    out = open(outfile, "w")
+    markdown = parse_rfc(args.infile, args.fill)
+    out = open(args.outfile, "w")
     out.write(markdown)
 
 
