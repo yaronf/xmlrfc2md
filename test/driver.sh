@@ -10,7 +10,7 @@ while [ $rfcnum -le $last ]; do
 	# curl $url > rfc$rfcnum-orig.xml
 	infile=rfc$rfcnum-orig.xml
 	outfile=rfc$rfcnum.md
-	python3.10 ../xmlrfc2md.py $infile $outfile
+	python3.10 ../xmlrfc2md.py $infile $outfile && kdrfc --html $outfile
 	rfcnum=$(($rfcnum+1))
 done
 

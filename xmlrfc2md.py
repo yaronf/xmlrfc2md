@@ -47,11 +47,12 @@ def concat_with_space(s, t: str) -> str:
         return s + " " + t
 
 
-def extract_text(root: ElementTree):
-    output = ""
-    for para in root.findall("t"):
-        output += para.text + "\n"
-    return output
+def simple_escape(t: str) -> str:
+    t = t.replace("<", "&lt;")
+    t = t.replace(">", "&gt;")
+    t = t.replace("[", "\[")
+    t = t.replace("]", "\]")
+    return t
 
 
 def section_title(elem: ElementTree, level: int):
@@ -144,6 +145,9 @@ def extract_figure(e: ElementTree) -> str:
 
 def extract_table(root: ElementTree) -> str:
     output = ""
+    anchor = root.get("anchor")
+    if anchor is not None:
+        output += "\n{: #" + anchor + "}"
     thead = root.find("./thead")
     output += "\n"
     if thead is not None:
@@ -190,7 +194,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
 """
     output = ""
     if root.text is not None:
-        output += collapse_spaces(root.text, span)
+        output += collapse_spaces(simple_escape(root.text), span)
     for elem in root:
         match elem.tag:
             case "t":
@@ -210,7 +214,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 if brackets is None or brackets == "none":
                     output = concat_with_space(output, elem.get("target"))
                 else:
-                    output = concat_with_space(output, "<" + elem.get("target") + ">")
+                    output = concat_with_space(output, "<" + elem.get("target") + ">")  ## and this is not escaped!
             case "li":
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
@@ -260,7 +264,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case _:
                 logging.error("skipping unknown element: %s", elem.tag)
         if elem.tail is not None:
-            output += collapse_spaces(elem.tail, span)
+            output += collapse_spaces(simple_escape(elem.tail), span)
     return output
 
 
@@ -520,9 +524,8 @@ def parse_rfc(infile: str, fill: bool):
     abstract = root.find("front/abstract")
     if abstract == "":
         sys.exit("No abstract found")
-    t = extract_text(abstract)
     output += "--- abstract\n\n"
-    output += t
+    output += extract_sections(abstract, 0, 0)
     output += "\n\n"
 
     middle = root.find("middle")
