@@ -1,4 +1,4 @@
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ElementTree
 import argparse
 import logging
 from typing import Any
@@ -47,14 +47,14 @@ def concat_with_space(s, t: str) -> str:
         return s + " " + t
 
 
-def extract_text(root: ET):
+def extract_text(root: ElementTree):
     output = ""
     for para in root.findall("t"):
         output += para.text + "\n"
     return output
 
 
-def section_title(elem: ET, level: int):
+def section_title(elem: ElementTree, level: int):
     anchor_name = elem.get("anchor")
     anchor = ""
     if anchor_name is not None:
@@ -67,7 +67,7 @@ def section_title(elem: ET, level: int):
     return "\n" + "#" * level + " " + name.text.strip() + " " + anchor + "\n"
 
 
-def extract_xref(elem: ET):
+def extract_xref(elem: ElementTree):
     target = elem.get("target")
     section = elem.get("section")
     section_format = elem.get("sectionFormat")
@@ -102,7 +102,7 @@ class Lists:
     Definition = 3
 
 
-def extract_sourcecode(e: ET) -> str:
+def extract_sourcecode(e: ElementTree) -> str:
     lang = e.get("type")
     if lang is None:
         return "\n~~~\n" + e.text + "\n~~~"
@@ -111,7 +111,7 @@ def extract_sourcecode(e: ET) -> str:
         return "\n~~~ " + lang + "\n" + e.text + "\n~~~"
 
 
-def extract_figure(e: ET) -> str:
+def extract_figure(e: ElementTree) -> str:
     anchor = e.get("anchor")
     if anchor is None:
         logging.error("missing anchor for figure")
@@ -139,7 +139,7 @@ def extract_figure(e: ET) -> str:
         return extract_sourcecode(content)
 
 
-def extract_table(root: ET) -> str:
+def extract_table(root: ElementTree) -> str:
     output = ""
     thead = root.find("./thead")
     output += "\n"
@@ -182,7 +182,7 @@ def extract_table(root: ET) -> str:
     return output
 
 
-def extract_sections(root: ET, section_level: int, list_level: int, list_type=Lists.NoType, span=False) -> str:
+def extract_sections(root: ElementTree, section_level: int, list_level: int, list_type=Lists.NoType, span=False) -> str:
     """Extract text from a sequence of <t> elements, possibly nested
 """
     output = ""
@@ -246,7 +246,7 @@ def extract_sections(root: ET, section_level: int, list_level: int, list_type=Li
     return output
 
 
-def extract_list(root: ET, section_level: int, list_level: int, list_type: int) -> str:
+def extract_list(root: ElementTree, section_level: int, list_level: int, list_type: int) -> str:
     if list_type == Lists.NoType:
         pre = ""
     elif list_type == Lists.Unordered:
@@ -278,7 +278,7 @@ def conditional_add(m: dict, key: str, value) -> None:
         m[key] = value
 
 
-def extract_preamble(rfc: ET) -> str:
+def extract_preamble(rfc: ElementTree) -> str:
     output = ""
     front = rfc.find("front")
     if front == "":
@@ -355,7 +355,7 @@ def extract_preamble(rfc: ET) -> str:
     return output
 
 
-def convert_authors(front: ET) -> list[dict]:
+def convert_authors(front: ElementTree) -> list[dict]:
     authors = []
     for a in front.findall("author"):
         author = {}
@@ -385,7 +385,7 @@ def convert_authors(front: ET) -> list[dict]:
     return authors
 
 
-def find_references(rfc: ET, ref_type: str) -> ET:
+def find_references(rfc: ElementTree, ref_type: str) -> ElementTree:
     for block in rfc.findall("./back/references/references"):
         name_el = block.find("./name")
         if name_el is None:
@@ -397,7 +397,7 @@ def find_references(rfc: ET, ref_type: str) -> ET:
     return None
 
 
-def full_ref(ref: ET) -> dict | None:
+def full_ref(ref: ElementTree) -> dict | None:
     out = {}
     target = ref.get("target")
     if target is not None:
@@ -425,7 +425,7 @@ def full_ref(ref: ET) -> dict | None:
     return out
 
 
-def convert_references(rfc: ET, ref_type: str) -> dict | None:
+def convert_references(rfc: ElementTree, ref_type: str) -> dict | None:
     ref_block = find_references(rfc, ref_type)
     if ref_block is None:
         logging.warning(f"no {ref_type} references?")
@@ -480,7 +480,7 @@ def fill_text(text: str) -> str:
 
 def parse_rfc(infile: str, fill: bool):
     output = ""
-    tree = ET.parse(infile)
+    tree = ElementTree.parse(infile)
     root = tree.getroot()
     if root.tag != "rfc":
         sys.exit("Tag not found:\"rfc\"")
