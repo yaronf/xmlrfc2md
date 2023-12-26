@@ -113,9 +113,9 @@ def extract_sourcecode(e: ElementTree) -> str:
 
 def extract_figure(e: ElementTree) -> str:
     anchor = e.get("anchor")
-    if anchor is None:
-        logging.error("missing anchor for figure")
-        return ""
+    no_anchor = (anchor is None)
+    if no_anchor:
+        anchor = "[no anchor]"
     artset = e.find("./artset")
     if artset is not None:
         logging.warning(f"artset found for figure {anchor},"
@@ -134,7 +134,10 @@ def extract_figure(e: ElementTree) -> str:
     name_el = e.find("./name")
     if name_el is not None:
         name = name_el.text
-        return extract_sourcecode(content) + "\n{: #" + anchor + " title=\"" + name + "\"}\n"
+        if not no_anchor:
+            return extract_sourcecode(content) + "\n{: #" + anchor + " title=\"" + name + "\"}\n"
+        else:
+            return extract_sourcecode(content) + "\n{: title=\"" + name + "\"}\n"
     else:
         return extract_sourcecode(content)
 
@@ -197,8 +200,17 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += extract_sections(elem, section_level, list_level)
                 output += "\n"
             case "blockquote":
-                output += "> " + extract_sections(elem, section_level, list_level)
+                output += "{:quote}\n> " + extract_sections(elem, section_level, list_level).lstrip()
                 output += "\n"
+            case "aside":
+                output += "{:aside}\n> " + extract_sections(elem, section_level, list_level).lstrip()
+                output += "\n"
+            case "eref":
+                brackets = elem.get("brackets")
+                if brackets is None or brackets == "none":
+                    output = concat_with_space(output, elem.get("target"))
+                else:
+                    output = concat_with_space(output, "<" + elem.get("target") + ">")
             case "li":
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
@@ -226,6 +238,12 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output = concat_with_space(output, elem.text)
             case "tt":
                 output = concat_with_space(output, "`" + elem.text + "`")
+            case "emph" | "em":
+                output = concat_with_space(output, "*" + elem.text + "*")
+            case "strong":
+                output = concat_with_space(output, "**" + elem.text + "**")
+            case "br":
+                output += "\n"
             case "sup":
                 output += "<sup>" + elem.text + "</sup>"
             case "contact":
@@ -296,8 +314,9 @@ def extract_preamble(rfc: ElementTree) -> str:
     conditional_add(preamble, "category", category)
     ipr = rfc.get("ipr")
     conditional_add(preamble, "ipr", ipr)
-    area = front.find("area").text
-    conditional_add(preamble, "area", area)
+    area_el = front.find("area")
+    if area_el is not None:
+        conditional_add(preamble, "area", area_el.text)
     workgroup_el = front.find("workgroup")
     if workgroup_el is not None:
         conditional_add(preamble, "workgroup", workgroup_el.text)
@@ -311,7 +330,7 @@ def extract_preamble(rfc: ElementTree) -> str:
     pi = {}
 
     # The following directives are set by default, and may need to be configurable
-    pi["rfcstyle"] = "yes"
+    pi["rfcedstyle"] = "yes"
     pi["strict"] = "yes"
     pi["comments"] = "yes"
     pi["inline"] = "yes"
@@ -386,7 +405,10 @@ def convert_authors(front: ElementTree) -> list[dict]:
 
 
 def find_references(rfc: ElementTree, ref_type: str) -> ElementTree:
-    for block in rfc.findall("./back/references/references"):
+    block_list = rfc.findall("./back/references/references")
+    if len(block_list) == 0:
+        block_list = rfc.findall("./back/references")
+    for block in block_list:
         name_el = block.find("./name")
         if name_el is None:
             logging.error("no name for reference block")
@@ -480,7 +502,12 @@ def fill_text(text: str) -> str:
 
 def parse_rfc(infile: str, fill: bool):
     output = ""
-    tree = ElementTree.parse(infile)
+    try:
+        tree = ElementTree.parse(infile)
+    except:
+        sys.exit("Exception while parsing input file")
+    if tree is None:
+        sys.exit("Cannot parse as XML")
     root = tree.getroot()
     if root.tag != "rfc":
         sys.exit("Tag not found:\"rfc\"")
