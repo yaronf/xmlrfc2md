@@ -104,6 +104,7 @@ class Lists:
     Ordered = 2
     Definition = 3
 
+
 def escape_sourcecode(t: str) -> str:
     t = t.replace("\t", " ")
     return t
@@ -573,7 +574,7 @@ def parse_rfc(infile: str, fill: bool):
         t = extracted
     else:
         t = fill_text(extracted)
-    output += "--- middle\n\n"
+    output += "\n--- middle\n\n"
     output += t
 
     back = root.find("back")
@@ -583,7 +584,7 @@ def parse_rfc(infile: str, fill: bool):
             t = extracted
         else:
             t = fill_text(extracted)
-        output += "--- back\n\n"
+        output += "\n--- back\n\n"
         output += t
 
     return output
