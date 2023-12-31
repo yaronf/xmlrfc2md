@@ -104,14 +104,19 @@ class Lists:
     Ordered = 2
     Definition = 3
 
+def escape_sourcecode(t: str) -> str:
+    t = t.replace("\t", " ")
+    return t
+
 
 def extract_sourcecode(e: ElementTree) -> str:
     lang = e.get("type")
+    t = escape_sourcecode(e.text)
     if lang is None:
-        return "\n~~~\n" + e.text + "\n~~~"
+        return "\n~~~\n" + t + "\n~~~"
     else:
         throttle("warn-lang", "language tag for source code may be incorrect")
-        return "\n~~~ " + lang + "\n" + e.text + "\n~~~"
+        return "\n~~~ " + lang + "\n" + t + "\n~~~"
 
 
 def extract_figure(e: ElementTree) -> str:
