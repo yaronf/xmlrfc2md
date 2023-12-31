@@ -259,7 +259,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "section":
                 name_el = elem.find("./name")
                 name = name_el.get("slugifiedName") if name_el is not None else None
-                if name is None or (name not in ["name-authors-addresses", "name-contributors"]):
+                if name is None or (name not in ["name-authors-addresses", "name-authors-address", "name-contributors"]):
                     # Hack: kdrfc only adds the author address section if the title is missing
                     output += section_title(elem, section_level + 1)
                     output += extract_sections(elem, section_level + 1, 0)
@@ -481,7 +481,7 @@ def convert_authors(front: ElementTree, tag_name: str, ) -> list[dict]:
             org = org_el.text
             if org:
                 person["organization"] = org
-        uri_el = a.find("uri")
+        uri_el = a.find("address/uri")
         if uri_el is not None:
             uri = uri_el.text
             person["uri"] = uri
