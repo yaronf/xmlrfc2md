@@ -229,7 +229,7 @@ def extract_table(root: ElementTree) -> str:
 
 
 def extract_sections(root: ElementTree, section_level: int, list_level: int, list_type=Lists.NoType, span=False) -> str:
-    """Extract text from a sequence of <t> elements, possibly nested
+    """Extract text from a sequence of elements within a section, possibly nested
 """
     output = ""
     if root.text is not None:
@@ -257,8 +257,10 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
-                if elem.get("anchor") != "authors-addresses":
-                    # Hack: kdrfc only adds this section if the title is missing
+                name_el = elem.find("./name")
+                name = name_el.get("slugifiedName") if name_el is not None else None
+                if name is None or (name not in ["name-authors-addresses", "name-contributors"]):
+                    # Hack: kdrfc only adds the author address section if the title is missing
                     output += section_title(elem, section_level + 1)
                     output += extract_sections(elem, section_level + 1, 0)
                     output += "\n"
@@ -298,7 +300,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += "\n"
             case "sup":
                 output += "<sup>" + elem.text + "</sup>"
-            case "contact":
+            case "contact":  # when used within running text, as opposed to the Contributors section
                 output += " " + elem.get("fullname")
             case "name" | "references" | "author":
                 pass  # section name is processed by section_title(), references processed in extract_preamble(),
@@ -433,8 +435,13 @@ def extract_preamble(rfc: ElementTree) -> str:
     kramdown_options = {"auto_id_prefix": "autogen-"}
     preamble["kramdown_options"] = kramdown_options
 
-    authors = convert_authors(front)
+    authors = convert_authors(front, "author")
     preamble["author"] = authors
+
+    contributor_section = find_contributors(rfc)
+    if contributor_section is not None:
+        contributors = convert_authors(contributor_section, "contact", )
+        preamble["contributor"] = contributors
 
     normative = convert_references(rfc, "normative")
     informative = convert_references(rfc, "informative")
@@ -457,48 +464,48 @@ def extract_preamble(rfc: ElementTree) -> str:
     return output
 
 
-def convert_authors(front: ElementTree) -> list[dict]:
+def convert_authors(front: ElementTree, tag_name: str, ) -> list[dict]:
     authors = []
-    for a in front.findall("author"):
-        author = {}
+    for a in front.findall(tag_name):
+        person = {}
         initials = a.get("initials")
         surname = a.get("surname")
         if initials is not None and surname is not None:
             ins = initials + " " + surname
-            author["ins"] = ins
+            person["ins"] = ins
         name = a.get("fullname")
         if name is not None:
-            author["name"] = name
+            person["name"] = name
         org_el = a.find("organization")
         if org_el is not None:
             org = org_el.text
             if org:
-                author["organization"] = org
+                person["organization"] = org
         uri_el = a.find("uri")
         if uri_el is not None:
             uri = uri_el.text
-            author["uri"] = uri
+            person["uri"] = uri
         email_el = a.find("address/email")
         if email_el is not None:
             email = email_el.text
-            author["email"] = email
+            person["email"] = email
         phone_el = a.find("address/phone")
         if phone_el is not None:
             phone = phone_el.text
-            author["phone"] = phone
+            person["phone"] = phone
         postal_el = a.find("address/postal")
         if postal_el is not None:
             street = postal_el.find("street")
-            conditional_add(author, "street", safe_text(street))
+            conditional_add(person, "street", safe_text(street))
             city = postal_el.find("city")
-            conditional_add(author, "city", safe_text(city))
+            conditional_add(person, "city", safe_text(city))
             region = postal_el.find("region")
-            conditional_add(author, "region", safe_text(region))
+            conditional_add(person, "region", safe_text(region))
             code = postal_el.find("code")
-            conditional_add(author, "code", safe_text(code))
+            conditional_add(person, "code", safe_text(code))
             country = postal_el.find("country")
-            conditional_add(author, "country", safe_text(country))
-        authors.append(author)
+            conditional_add(person, "country", safe_text(country))
+        authors.append(person)
     return authors
 
 
@@ -532,6 +539,16 @@ def find_references(rfc: ElementTree, ref_type: str) -> ElementTree:
     return None
 
 
+def find_contributors(rfc: ElementTree) -> ElementTree:
+    sections = rfc.findall("./back/section")
+    for s in sections:
+        name_el = s.find("./name")
+        name = name_el.get("slugifiedName") if name_el is not None else None
+        if name is not None and name == "name-contributors":
+            return s
+    return None
+
+
 def full_ref(ref: ElementTree) -> dict | None:
     out = {}
     target = ref.get("target")
@@ -561,7 +578,7 @@ def full_ref(ref: ElementTree) -> dict | None:
         out["date"] = date
     else:
         out["date"] = False
-    authors = convert_authors(front)
+    authors = convert_authors(front, "author")
     out["author"] = authors
     seriesinfo = convert_series_info(front)
     if seriesinfo is not None:
