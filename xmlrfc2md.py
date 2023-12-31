@@ -570,8 +570,8 @@ def parse_rfc(infile: str, fill: bool):
     # noinspection PyBroadException
     try:
         tree = ElementTree.parse(infile)
-    except Exception:
-        sys.exit("Exception while parsing input file")
+    except Exception as e:
+        sys.exit("Exception while parsing input file: " + str(e))
     if tree is None:
         sys.exit("Cannot parse as XML")
     root = tree.getroot()
