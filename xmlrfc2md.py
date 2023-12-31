@@ -267,7 +267,12 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "ol":
                 output += extract_sections(elem, section_level, list_level, Lists.Ordered)
             case "dl":
-                output += extract_sections(elem, section_level, list_level, Lists.Definition)
+                indent = elem.get("indent")
+                if indent is None:
+                    ial = ""
+                else:
+                    ial = "\n" + generate_ial({"indent": indent})
+                output += ial + extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dt":
                 anchor = elem.get("anchor")
                 if anchor is not None:
