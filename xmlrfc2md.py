@@ -75,10 +75,15 @@ def extract_xref(elem: ElementTree):
     section = elem.get("section")
     section_format = elem.get("sectionFormat")
     fmt = elem.get("format")
+    txt = elem.text
 
     if target is None:
         logging.error("missing target in xref")
         return "badxref"
+    if txt is not None:
+        if fmt != "default":
+            logging.warning("Cannot render specially formatted xref with text content")
+        return "[" + simple_escape(txt) + "](#" + target + ")"
     if section is None:
         if fmt == "counter":
             return "{{<" + target + "}}"
