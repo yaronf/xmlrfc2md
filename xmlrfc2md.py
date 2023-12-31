@@ -57,6 +57,11 @@ def simple_escape(t: str) -> str:
     return t
 
 
+def escape_title(t: str) -> str:
+    t = t.replace("\t", " ")
+    return t
+
+
 def section_title(elem: ElementTree, level: int):
     anchor_name = elem.get("anchor")
     anchor = ""
@@ -157,12 +162,10 @@ def extract_figure(e: ElementTree) -> str:
 
 
 def extract_table(root: ElementTree) -> str:
-    output = ""
+    content = ""
     anchor = root.get("anchor")
-    if anchor is not None:
-        output += "\n{: #" + anchor + "}"
     thead = root.find("./thead")
-    output += "\n"
+    content += "\n"
     if thead is not None:
         tr = thead.find("./tr")
         if tr is None:
@@ -170,10 +173,10 @@ def extract_table(root: ElementTree) -> str:
             return ""
         ths = tr.findall("./th")
         for th in ths:
-            output += "|" + extract_sections(th, 0, 0, span=True)
-        output += "\n"
+            content += "|" + extract_sections(th, 0, 0, span=True)
+        content += "\n"
         for th in ths:
-            output += "|"
+            content += "|"
             align = th.get("align")
             if align is None:
                 dash = "-"
@@ -183,8 +186,8 @@ def extract_table(root: ElementTree) -> str:
                 dash = ":-:"
             else:
                 dash = "-:"
-            output += dash + " "
-        output += "\n"
+            content += dash + " "
+        content += "\n"
     tbody = root.find("./tbody")
     if tbody is None:
         logging.error("no body for table")
@@ -196,10 +199,17 @@ def extract_table(root: ElementTree) -> str:
     for tr in trs:
         tds = tr.findall("./td")
         for td in tds:
-            output += "|" + extract_sections(td, 0, 0, span=True)
-        output += "\n"
-    output += "\n"
-    return output
+            content += "|" + extract_sections(td, 0, 0, span=True)
+        content += "\n"
+    name_el = root.find("./name")
+    if name_el is not None:
+        name = escape_title(name_el.text)
+        if anchor is not None:
+            return content + "{: #" + anchor + " title=\"" + name + "\"}\n"
+        else:
+            return content + "{: title=\"" + name + "\"}\n"
+    else:
+        return content
 
 
 def extract_sections(root: ElementTree, section_level: int, list_level: int, list_type=Lists.NoType, span=False) -> str:
