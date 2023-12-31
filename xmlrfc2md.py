@@ -325,6 +325,12 @@ def conditional_add(m: dict, key: str, value) -> None:
         m[key] = value
 
 
+def safe_text(e: ElementTree) -> str | None:
+    if e is None:
+        return None
+    return e.text
+
+
 def matches_rfc(s: str) -> bool:
     match = re.fullmatch("rfc[0-9]+", s, re.IGNORECASE)
     return match is not None
@@ -440,7 +446,22 @@ def convert_authors(front: ElementTree) -> list[dict]:
         if email_el is not None:
             email = email_el.text
             author["email"] = email
-
+        phone_el = a.find("address/phone")
+        if phone_el is not None:
+            phone = phone_el.text
+            author["phone"] = phone
+        postal_el = a.find("address/postal")
+        if postal_el is not None:
+            street = postal_el.find("street")
+            conditional_add(author, "street", safe_text(street))
+            city = postal_el.find("city")
+            conditional_add(author, "city", safe_text(city))
+            region = postal_el.find("region")
+            conditional_add(author, "region", safe_text(region))
+            code = postal_el.find("code")
+            conditional_add(author, "code", safe_text(code))
+            country = postal_el.find("country")
+            conditional_add(author, "country", safe_text(country))
         authors.append(author)
     return authors
 
