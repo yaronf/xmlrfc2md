@@ -445,6 +445,21 @@ def convert_authors(front: ElementTree) -> list[dict]:
     return authors
 
 
+def convert_series_info(front: ElementTree) -> dict | None:
+    seriesinfo = {}
+    for si in front.findall("seriesInfo"):
+        name = si.get("name")
+        value = si.get("value")
+        if name is None or value is None:
+            logging.warning("bad seriesInfo, skipping")
+            continue
+        seriesinfo[name] = value
+    if len(seriesinfo) > 0:
+        return seriesinfo
+    else:
+        return None
+
+
 def find_references(rfc: ElementTree, ref_type: str) -> ElementTree:
     block_list = rfc.findall("./back/references/references")
     if len(block_list) == 0:
@@ -465,11 +480,15 @@ def full_ref(ref: ElementTree) -> dict | None:
     target = ref.get("target")
     if target is not None:
         out["target"] = target
+    refcontent_el = ref.find("refcontent")
+    if refcontent_el is not None and refcontent_el.text is not None:
+        out["refcontent"] = refcontent_el.text
     front = ref.find("front")
     if front is None:
         logging.error("reference with no front")
         return None
     title_el = front.find("title")
+    # Cannot set quoteTitle to False, https://github.com/cabo/kramdown-rfc/issues/182
     if title_el is None:
         logging.error("reference with no title")
         return None
@@ -483,8 +502,13 @@ def full_ref(ref: ElementTree) -> dict | None:
         else:
             date = year
         out["date"] = date
+    else:
+        out["date"] = False
     authors = convert_authors(front)
     out["author"] = authors
+    seriesinfo = convert_series_info(front)
+    if seriesinfo is not None:
+        out["seriesinfo"] = seriesinfo
     return out
 
 
