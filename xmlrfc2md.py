@@ -120,14 +120,30 @@ def escape_sourcecode(t: str) -> str:
     return t
 
 
+def generate_ial(pairs: dict) -> str:
+    output = "{:"
+    for k in pairs:
+        if k == "id":
+            output += " #" + pairs[k]
+        else:
+            output += " " + k + "='" + pairs[k] + "'"
+    output += "}"
+    return output
+
+
 def extract_sourcecode(e: ElementTree) -> str:
     lang = e.get("type")
     t = escape_sourcecode(e.text)
+    marker = e.get("markers")
+    if marker is not None and marker == "true":
+        ial = "\n" + generate_ial({"sourcecode-markers": "true"})
+    else:
+        ial = ""
     if lang is None:
-        return "\n~~~\n" + t + "\n~~~"
+        return "\n~~~\n" + t + "\n~~~" + ial
     else:
         throttle("warn-lang", "language tag for source code may be incorrect")
-        return "\n~~~ " + lang + "\n" + t + "\n~~~"
+        return "\n~~~ " + lang + "\n" + t + "\n~~~" + ial
 
 
 def extract_figure(e: ElementTree) -> str:
@@ -154,9 +170,9 @@ def extract_figure(e: ElementTree) -> str:
     if name_el is not None:
         name = name_el.text
         if not no_anchor:
-            return extract_sourcecode(content) + "\n{: #" + anchor + " title=\"" + name + "\"}\n"
+            return extract_sourcecode(content) + "\n" + generate_ial({"id": anchor, "title": name}) + "\n"
         else:
-            return extract_sourcecode(content) + "\n{: title=\"" + name + "\"}\n"
+            return extract_sourcecode(content) + "\n" + generate_ial({"title": name}) + "\n"
     else:
         return extract_sourcecode(content)
 
@@ -205,9 +221,9 @@ def extract_table(root: ElementTree) -> str:
     if name_el is not None:
         name = escape_title(name_el.text)
         if anchor is not None:
-            return content + "{: #" + anchor + " title=\"" + name + "\"}\n"
+            return content + generate_ial({"id": anchor, "title": name}) + "\n"
         else:
-            return content + "{: title=\"" + name + "\"}\n"
+            return content + generate_ial({"title": name}) + "\n"
     else:
         return content
 
@@ -223,7 +239,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "t":
                 anchor = elem.get("anchor")
                 if anchor is not None and not anchor.startswith("section-"):
-                    output += "{: #" + anchor + "}\n"
+                    output += generate_ial({"id": anchor}) + "\n"
                 output += extract_sections(elem, section_level, list_level)
                 output += "\n"
             case "blockquote":
@@ -237,7 +253,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "li":
                 anchor = elem.get("anchor")
                 if anchor is not None:
-                    output += "{: #" + anchor + "}\n"
+                    output += generate_ial({"id": anchor}) + "\n"
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
@@ -255,7 +271,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "dt":
                 anchor = elem.get("anchor")
                 if anchor is not None:
-                    output += ("\n" + " {: #" + anchor + "}" +
+                    output += ("\n" + generate_ial({"id": anchor}) +
                                extract_sections(elem, section_level, list_level, Lists.Definition))
                 else:
                     output += "\n" + extract_sections(elem, section_level, list_level, Lists.Definition)
