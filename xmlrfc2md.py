@@ -51,8 +51,8 @@ def concat_with_space(s, t: str) -> str:
 def simple_escape(t: str) -> str:
     t = t.replace("<", "&lt;")
     t = t.replace(">", "&gt;")
-    t = t.replace("[", "\[")
-    t = t.replace("]", "\]")
+    t = t.replace("[", "\\[")
+    t = t.replace("]", "\\]")
     t = t.replace("\t", " ")
     return t
 
@@ -234,7 +234,8 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "dt":
                 anchor = elem.get("anchor")
                 if anchor is not None:
-                    output += "\n" + " {: #" + anchor + "}" + extract_sections(elem, section_level, list_level, Lists.Definition)
+                    output += ("\n" + " {: #" + anchor + "}" +
+                               extract_sections(elem, section_level, list_level, Lists.Definition))
                 else:
                     output += "\n" + extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dd":
@@ -536,9 +537,10 @@ def fill_text(text: str) -> str:
 
 def parse_rfc(infile: str, fill: bool):
     output = ""
+    # noinspection PyBroadException
     try:
         tree = ElementTree.parse(infile)
-    except:
+    except Exception:
         sys.exit("Exception while parsing input file")
     if tree is None:
         sys.exit("Cannot parse as XML")
