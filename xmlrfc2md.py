@@ -2,7 +2,7 @@ import re
 import xml.etree.ElementTree as ElementTree
 import argparse
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import yaml  # pyyaml package
 import sys
@@ -121,13 +121,16 @@ def escape_sourcecode(t: str) -> str:
 
 
 def generate_ial(pairs: dict) -> str:
-    output = "{:"
-    for k in pairs:
-        if k == "id":
-            output += " #" + pairs[k]
-        else:
-            output += " " + k + "='" + pairs[k] + "'"
-    output += "}"
+    if len(pairs) == 0:
+        output = ""
+    else:
+        output = "{:"
+        for k in pairs:
+            if k == "id":
+                output += " #" + pairs[k]
+            else:
+                output += " " + k + "='" + pairs[k] + "'"
+        output += "}"
     return output
 
 
@@ -263,12 +266,17 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
+                ials = {}
+                numbered = elem.get("numbered")
+                if numbered is not None:
+                    ials["numbered"] = numbered
                 name_el = elem.find("./name")
                 name = name_el.get("slugifiedName") if name_el is not None else None
                 if (name is None or
                         (name not in ["name-authors-addresses", "name-authors-address", "name-contributors"])):
                     # Hack: kdrfc only adds the author address section if the title is missing
                     output += section_title(elem, section_level + 1)
+                    output += generate_ial(ials)
                     output += extract_sections(elem, section_level + 1, 0)
                     output += "\n"
             case "ul":
