@@ -151,7 +151,7 @@ def extract_sourcecode(e: ElementTree) -> str:
     if marker is not None and marker == "true":
         ials["sourcecode-markers"] = "true"
     name = e.get("name")
-    if name is not None:
+    if name is not None and name != "":
         ials["sourcecode-name"] = name
     if len(ials) > 0:
         ial = "\n" + generate_ial(ials)
@@ -286,9 +286,11 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                     output += extract_sections(elem, section_level + 1, 0)
                     output += "\n"
             case "ul":
-                output += extract_sections(elem, section_level, list_level, Lists.Unordered)
+                output += generate_ial(attrib_map(elem, ["type"]))
+                output += extract_sections(elem, section_level, list_level + 1, Lists.Unordered)
             case "ol":
-                output += extract_sections(elem, section_level, list_level, Lists.Ordered)
+                output += generate_ial(attrib_map(elem, ["type"]))
+                output += extract_sections(elem, section_level, list_level + 1, Lists.Ordered)
             case "dl":
                 ials = attrib_map(elem, ["indent", "newline"])
                 if not ials:
