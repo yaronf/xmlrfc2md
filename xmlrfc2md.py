@@ -238,7 +238,14 @@ def extract_table(root: ElementTree) -> str:
     for tr in trs:
         tds = tr.findall("./td")
         for td in tds:
-            content += "|" + extract_sections(td, 0, 0, span=True)
+            # "colspan" is not directly supported, and we prefer the "arcane" Markdown syntax for tables
+            # because kdrfc still generates the old/deprecated xml2rfc table syntax.
+            colspan = td.get("colspan")
+            if colspan is None:
+                colspan = 1
+            else:
+                colspan = int(colspan)
+            content += "|" * colspan + extract_sections(td, 0, 0, span=True)
         content += "\n"
     name_el = root.find("./name")
     if name_el is not None:
