@@ -134,6 +134,15 @@ def generate_ial(pairs: dict) -> str:
     return output
 
 
+def attrib_map(e: ElementTree, attribs: list[str]):
+    a = {}
+    for k in attribs:
+        v = e.get(k)
+        if v is not None:
+            a[k] = v
+    return a
+
+
 def extract_sourcecode(e: ElementTree) -> str:
     lang = e.get("type")
     t = escape_sourcecode(e.text)
@@ -266,10 +275,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
-                ials = {}
-                numbered = elem.get("numbered")
-                if numbered is not None:
-                    ials["numbered"] = numbered
+                ials = attrib_map(elem, ["numbered"])
                 name_el = elem.find("./name")
                 name = name_el.get("slugifiedName") if name_el is not None else None
                 if (name is None or
@@ -284,11 +290,11 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "ol":
                 output += extract_sections(elem, section_level, list_level, Lists.Ordered)
             case "dl":
-                indent = elem.get("indent")
-                if indent is None:
+                ials = attrib_map(elem, ["indent", "newline"])
+                if not ials:
                     ial = ""
                 else:
-                    ial = "\n" + generate_ial({"indent": indent})
+                    ial = "\n" + generate_ial(ials)
                 output += ial + extract_sections(elem, section_level, list_level, Lists.Definition)
             case "dt":
                 anchor = elem.get("anchor")
