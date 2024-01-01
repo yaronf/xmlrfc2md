@@ -128,6 +128,11 @@ def generate_ial(pairs: dict) -> str:
         for k in pairs:
             if k == "id":
                 output += " #" + pairs[k]
+            elif k == "gi":
+                if pairs[k] == "blockquote":
+                    output += " quote"
+                else:
+                    output += " aside"
             else:
                 output += " " + k + "='" + pairs[k] + "'"
         output += "}"
@@ -261,10 +266,14 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += extract_sections(elem, section_level, list_level)
                 output += "\n"
             case "blockquote":
-                output += "{:quote}\n> " + extract_sections(elem, section_level, list_level).lstrip()
+                ials = attrib_map(elem, ["quotedFrom"])
+                ials["gi"] = "blockquote"
+                output += generate_ial(ials) + "\n> " + extract_sections(elem, section_level, list_level).lstrip()
                 output += "\n"
             case "aside":
-                output += "{:aside}\n> " + extract_sections(elem, section_level, list_level).lstrip()
+                ials = attrib_map(elem, ["quotedFrom"])
+                ials["gi"] = "aside"
+                output += generate_ial(ials) + "\n> " + extract_sections(elem, section_level, list_level).lstrip()
                 output += "\n"
             case "eref":
                 output = extract_eref(output, elem)
@@ -320,7 +329,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
             case "strong":
                 output = concat_with_space(output, "**" + elem.text + "**")
             case "br":
-                output += "\n"
+                output += "<br/>"
             case "sup":
                 output += "<sup>" + elem.text + "</sup>"
             case "contact":  # when used within running text, as opposed to the Contributors section
