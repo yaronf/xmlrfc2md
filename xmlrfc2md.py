@@ -24,7 +24,7 @@ def throttle(msg_type, msg: str) -> None:
     messages[msg_type] += 1
 
 
-def collapse_spaces(t: str, span=False):
+def collapse_spaces(t: str, span: bool = False):
     lines = t.splitlines()
     out = []
     for ln in lines:
@@ -62,7 +62,7 @@ def escape_title(t: str) -> str:
     return t
 
 
-def section_title(elem: ElementTree, level: int):
+def section_title(elem: ElementTree, level: int) -> str:
     anchor_name = elem.get("anchor")
     anchor = ""
     if anchor_name is not None:
@@ -75,7 +75,7 @@ def section_title(elem: ElementTree, level: int):
     return "\n" + "#" * level + " " + name.text.strip() + " " + anchor + "\n"
 
 
-def extract_xref(elem: ElementTree):
+def extract_xref(elem: ElementTree) -> str:
     target = elem.get("target")
     section = elem.get("section")
     section_format = elem.get("sectionFormat")
@@ -139,11 +139,12 @@ def generate_ial(pairs: dict) -> str:
     return output
 
 
-def attrib_map(e: ElementTree, attribs: list[str]):
+# noinspection PyDefaultArgument
+def attrib_map(e: ElementTree, attribs: list[str], exclude: list[(str, str)] = []):
     a = {}
     for k in attribs:
         v = e.get(k)
-        if v is not None:
+        if v is not None and ((k, v) not in exclude):
             a[k] = v
     return a
 
@@ -291,7 +292,7 @@ def extract_sections(root: ElementTree, section_level: int, list_level: int, lis
                 output += extract_list(elem, section_level, list_level + 1, list_type)
                 output += "\n"
             case "section":
-                ials = attrib_map(elem, ["numbered"])
+                ials = attrib_map(elem, ["numbered"], exclude=[("numbered", "true")])
                 name_el = elem.find("./name")
                 name = name_el.get("slugifiedName") if name_el is not None else None
                 if (name is None or
@@ -503,7 +504,7 @@ def extract_preamble(rfc: ElementTree) -> str:
     return output
 
 
-def convert_authors(front: ElementTree, tag_name: str, ) -> list[dict]:
+def convert_authors(front: ElementTree, tag_name: str) -> list[dict]:
     authors = []
     for a in front.findall(tag_name):
         person = {}
