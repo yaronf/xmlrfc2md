@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.10
+
 import re
 import xml.etree.ElementTree as ElementTree
 import argparse
@@ -12,8 +14,6 @@ if sys.version_info < (3, 10):
     raise RuntimeError("This package requres Python 3.10+")
 
 wrapper = textwrap.TextWrapper(width=120, replace_whitespace=False, break_on_hyphens=False)
-
-internal_refs = []
 
 messages: dict[Any, int] = {}
 
@@ -69,7 +69,6 @@ def section_title(elem: ElementTree, level: int) -> str:
     anchor_name = elem.get("anchor")
     anchor = ""
     if anchor_name is not None:
-        internal_refs.append(anchor_name)
         anchor = "{#" + elem.get("anchor") + "}"
     name = elem.find("name")
     if name is None:
