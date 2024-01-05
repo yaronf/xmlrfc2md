@@ -8,6 +8,9 @@ import yaml  # pyyaml package
 import sys
 import textwrap
 
+if sys.version_info < (3, 10):
+    raise RuntimeError("This package requres Python 3.10+")
+
 wrapper = textwrap.TextWrapper(width=120, replace_whitespace=False, break_on_hyphens=False)
 
 internal_refs = []
