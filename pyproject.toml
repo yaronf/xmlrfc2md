@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name='xmlrfc2md'
+version="0.1.0"
+authors = [
+    {name = "Yaron Sheffer", email = "yaronf.ietf@gmail.com"},
+]
+description='Convert a published RFC from XML to Markdown'
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+]
+requires-python = ">= 3.10"
+dependencies = [
+    "pyyaml",
+]
+
+[project.urls]
+Repository = "https://github.com/yaronf/xmlrfc2md"
+
+[project.scripts]
+xmlrfc2md = "xmlrfc2md.xmlrfc2md:main"
